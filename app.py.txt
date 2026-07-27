@@ -1,0 +1,204 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+
+# ---------------------------------------------------------
+# 1. 페이지 기본 설정
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="신재생에너지 노후화 통합 관제 대시보드",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS 스타일링
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 26px;
+        font-weight: bold;
+        color: #1E293B;
+        margin-bottom: 5px;
+    }
+    .sub-title {
+        font-size: 15px;
+        color: #64748B;
+        margin-bottom: 25px;
+    }
+    .metric-card {
+        background-color: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# 2. 샘플 데이터 생성 (뉴스 기사 기반 데이터 반영)
+# ---------------------------------------------------------
+@st.cache_data
+def load_data():
+    # 지역별 노후 발전소 데이터
+    region_data = pd.DataFrame({
+        "지역": ["경북 영덕", "전남 영암/해남", "제주 신창/행원", "강원 평창", "충남 태안"],
+        "lat": [36.415, 34.750, 33.350, 37.600, 36.750],
+        "lon": [129.330, 126.580, 126.180, 128.550, 126.290],
+        "주요발전원": ["육상 풍력", "대규모 태양광", "해풍 풍력", "육상 풍력", "태양광"],
+        "총설비수": [26, 120, 15, 30, 45],
+        "노후설비수(15년이상)": [24, 48, 8, 11, 10],
+        "노후화율(%)": [92.3, 40.0, 53.3, 36.7, 22.2],
+        "위험등급": ["위험 (Red)", "경고 (Orange)", "경고 (Orange)", "주의 (Yellow)", "정상 (Green)"],
+        "맞춤형솔루션": [
+            "CBM/드론 열화상 진단 & 대형기종 리파워링",
+            "방치 홍보관 관제센터 전환 & 폐모듈 2nd Life 재활용",
+            "내염성 방청 피복 강화 & 폐배터리 ESS 연계",
+            "진동 모니터링 강화 & 안전 가이드라인 적용",
+            "정기 성능 모니터링 및 미세 점검"
+        ]
+    })
+    
+    # 영덕 풍력 발전기 개별 CBM 진단 데이터
+    yeongdeok_detail = pd.DataFrame({
+        "발전기ID": [f"영덕 {i}호기" for i in range(1, 25)],
+        "운용연수": np.random.randint(18, 22, size=24),
+        "타워진동지수": np.random.uniform(1.2, 4.8, size=24).round(2),
+        "블레이드결함": np.random.choice(["정상", "미세균열", "박리위험", "열화상이상"], size=24, p=[0.3, 0.4, 0.2, 0.1]),
+        "위험도스코어": np.random.randint(55, 98, size=24)
+    })
+    
+    return region_data, yeongdeok_detail
+
+region_df, yeongdeok_df = load_data()
+
+# ---------------------------------------------------------
+# 3. 사이드바 (필터 및 제어)
+# ---------------------------------------------------------
+st.sidebar.image("https://img.icons8.com/color/96/wind-turbine.png", width=60)
+st.sidebar.title("관제 필터 옵션")
+
+selected_region = st.sidebar.selectbox(
+    "집중 분석 지역 선택",
+    options=["전체 보기"] + list(region_df["지역"].unique())
+)
+
+selected_risk = st.sidebar.multiselect(
+    "위험 등급 필터",
+    options=region_df["위험등급"].unique(),
+    default=region_df["위험등급"].unique()
+)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📌 주요 사고 기사 요약")
+st.sidebar.caption("• 경북 영덕: 20년 이상 노후 풍력 92.3% 집중, 붕괴 및 화재 발생")
+st.sidebar.caption("• 전라남도: 신재생에너지 홍보관 방치 및 사후관리 체계 미비")
+st.sidebar.caption("• 안전 규제: 건축물이 아닌 '구조물' 분류로 법적 사각지대 존재")
+
+# ---------------------------------------------------------
+# 4. 메인 화면 헤드라인 및 KPI Metrics
+# ---------------------------------------------------------
+st.markdown('<div class="main-title">⚡ 신재생에너지 노후 발전소 통합 관제 & 리파워링 대시보드</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">설비 노후화 위험도 실시간 감지 및 지역 맞춤형 자원순환 솔루션 제시</div>', unsafe_allow_html=True)
+
+# Top KPI 카드 4개
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+with kpi1:
+    st.metric(label="전국 20년 이상 풍력 집중도 (영덕)", value="92.3%", delta="24기 / 26기", delta_color="inverse")
+with kpi2:
+    st.metric(label="관제 대상 노후 발전소", value="101 기/단지", delta="고위험 24기 포함", delta_color="inverse")
+with kpi3:
+    st.metric(label="평균 발전 효율 저하율", value="-18.4%", delta="수명 도과 원인", delta_color="inverse")
+with kpi4:
+    st.metric(label="리파워링 추진 시 예상 효율 상승", value="+240%", delta="고효율 신형 교체 시")
+
+st.markdown("---")
+
+# ---------------------------------------------------------
+# 5. 메인 레이아웃 (지도 + 현황 차트)
+# ---------------------------------------------------------
+col_left, col_right = st.columns([1.2, 1])
+
+# 필터링 적용
+filtered_df = region_df[region_df["위험등급"].isin(selected_risk)]
+if selected_region != "전체 보기":
+    filtered_df = filtered_df[filtered_df["지역"] == selected_region]
+
+with col_left:
+    st.subheader("🗺️ 전국 노후 신재생에너지 위험도 GIS 맵")
+    
+    # Scatter mapbox 생성
+    fig_map = px.scatter_mapbox(
+        filtered_df,
+        lat="lat",
+        lon="lon",
+        size="노후설비수(15년이상)",
+        color="노후화율(%)",
+        color_continuous_scale="Reds",
+        hover_name="지역",
+        hover_data=["주요발전원", "총설비수", "위험등급"],
+        zoom=6.2,
+        center={"lat": 35.8, "lon": 127.8},
+        mapbox_style="carto-positron",
+        height=450
+    )
+    fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+    st.plotly_chart(fig_map, use_container_width=True)
+
+with col_right:
+    st.subheader("📊 지역별 노후화율 및 주요 위험 원인")
+    
+    # 막대 그래프
+    fig_bar = px.bar(
+        filtered_df.sort_values(by="노후화율(%)", ascending=True),
+        x="노후화율(%)",
+        y="지역",
+        orientation='h',
+        color="주요발전원",
+        text="노후화율(%)",
+        color_discrete_sequence=px.colors.qualitative.Set2,
+        height=450
+    )
+    fig_bar.update_traces(texttemplate='%{text}%', textposition='outside')
+    fig_bar.update_layout(xaxis_range=[0, 110], margin={"r":10,"t":10,"l":10,"b":10})
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+st.markdown("---")
+
+# ---------------------------------------------------------
+# 6. 하단 상세 영역 (AI/CBM 진단 및 지역별 맞춤 솔루션)
+# ---------------------------------------------------------
+st.subheader("🔍 세부 모니터링 & 지역 맞춤형 관리 솔루션 (TO-BE)")
+
+tab1, tab2 = st.columns([1, 1])
+
+with tab1:
+    st.markdown("### ⚠️ [고위험 사례] 영덕 풍력단지 개별 CBM 진단")
+    st.caption("AI/드론 센서 데이터 기반 24개 발전기 실시간 상태 진단 결과")
+    
+    # Scatter Plot (진동지수 vs 위험도스코어)
+    fig_cbm = px.scatter(
+        yeongdeok_df,
+        x="타워진동지수",
+        y="위험도스코어",
+        size="운용연수",
+        color="블레이드결함",
+        hover_name="발전기ID",
+        color_discrete_map={"정상": "green", "미세균열": "orange", "박리위험": "red", "열화상이상": "purple"}
+    )
+    fig_cbm.add_hline(y=85, line_dash="dash", line_color="red", annotation_text="긴급 점검 기준 (85점)")
+    fig_cbm.update_layout(height=320, margin={"r":10,"t":20,"l":10,"b":10})
+    st.plotly_chart(fig_cbm, use_container_width=True)
+
+with tab2:
+    st.markdown("### 💡 지역별 특화 솔루션 추천")
+    
+    for idx, row in filtered_df.iterrows():
+        with st.expander(f"📍 {row['지역']} ({row['주요발전원']}) - 위험도: {row['위험등급']}"):
+            st.write(f"**· 노후 설비 현황:** 총 {row['총설비수']}기 중 {row['노후설비수(15년이상)']}기 수명 도과 ({row['노후화율(%)']}%)")
+            st.write(f"**· 권장 맞춤 솔루션:**")
+            st.info(f"👉 {row['맞춤형솔루션']}")
